@@ -3,10 +3,93 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>Explosion Animation</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        background: #111;
+        font-family: Arial, sans-serif;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        text-align: center;
+      }
+
+      h1 {
+        color: #ff6600;
+        margin-bottom: 10px;
+      }
+
+      canvas {
+        display: block;
+        margin: 20px auto;
+        border: 2px solid #333;
+        background: #000;
+      }
+
+      .controls {
+        margin: 20px 0;
+      }
+
+      button {
+        padding: 15px 30px;
+        margin: 10px;
+        font-size: 18px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      #createBtn {
+        background: #e74c3c;
+        color: white;
+      }
+
+      #createBtn:hover {
+        background: #c0392b;
+      }
+
+      #clearBtn {
+        background: #7f8c8d;
+        color: white;
+      }
+
+      #clearBtn:hover {
+        background: #95a5a6;
+      }
+
+      .info {
+        color: #aaa;
+        margin-top: 20px;
+        font-size: 14px;
+      }
+    </style>
   </head>
   <body>
-    <canvas width="200px" height="430px"> </canvas>
+    <div class="container">
+      <h1>💥 Explosion Animation</h1>
+      <p style="color: #ccc">
+        Click "Create Explosion" to add explosions at random positions
+      </p>
+
+      <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+      <div class="controls">
+        <button id="createBtn" onclick="createExplosion()">
+          Create Explosion
+        </button>
+        <button id="clearBtn" onclick="clearExplosions()">Clear All</button>
+      </div>
+
+      <div class="info">
+        Each explosion plays through 26 frames with random size and speed
+      </div>
+    </div>
+
+    <script src="assets/JS/explosion.js"></script>
   </body>
-  <script src="assets/JS/main.js"></script>
 </html>

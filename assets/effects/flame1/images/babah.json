@@ -29,7 +29,7 @@
 	{ "name": "Sek_00013", "bone": "root", "attachment": "Sek_00013" },
 	{ "name": "Sek_00014", "bone": "root", "attachment": "Sek_00014" },
 	{ "name": "Sek_00015", "bone": "root", "attachment": "Sek_00015" },
-	{ "name": "Sek_00016", "bone": "root", "attachment": "Sek_00016" },
+	{ "name": "Sek_00016", "bone": "root", "attachment": "Sek_00016" }
 ],
 "skins": {
 	"default": {
