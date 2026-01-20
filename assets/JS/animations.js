@@ -1,9 +1,9 @@
-// animations.js - MANAGES ALL ANIMATIONS
+// animations.js - FIXED VERSION
 const animations = {
   explosions: [],
   flames: [],
-  smokes: [], // For future animations
-  sparkles: [], // For future animations
+  smokes: [],
+  sparkles: [],
 };
 
 let animationLoopId = null;
@@ -13,31 +13,26 @@ class AnimationManager {
   static add(animation, type) {
     if (animations[type]) {
       animations[type].push(animation);
-      AnimationManager.startLoop();
-    } else {
-      console.error(`Unknown animation type: ${type}`);
-    }
-  }
 
-  static remove(animation, type) {
-    if (animations[type]) {
-      const index = animations[type].indexOf(animation);
-      if (index > -1) {
-        animations[type].splice(index, 1);
+      // ⭐ CRITICAL FIX: Always try to start loop when adding animation
+      AnimationManager.startLoop();
+
+      // ⭐ DOUBLE CHECK: If loop didn't start, force it
+      if (!animationLoopId) {
+        console.log(`Starting animation loop for ${type}`);
+        animationLoopId = requestAnimationFrame(() =>
+          AnimationManager.gameLoop(),
+        );
       }
     }
   }
 
   static startLoop() {
     if (!animationLoopId) {
-      animationLoopId = requestAnimationFrame(AnimationManager.gameLoop);
-    }
-  }
-
-  static stopLoop() {
-    if (animationLoopId) {
-      cancelAnimationFrame(animationLoopId);
-      animationLoopId = null;
+      console.log("🔄 Starting main animation loop");
+      animationLoopId = requestAnimationFrame(() =>
+        AnimationManager.gameLoop(),
+      );
     }
   }
 
@@ -45,31 +40,34 @@ class AnimationManager {
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    // Clear canvas once
+    // Clear canvas
     ctx.fillStyle = "#0a0a0a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     let hasActiveAnimations = false;
 
-    // Update and draw ALL animation types
+    // Check ALL animation types
     Object.keys(animations).forEach((type) => {
       const animList = animations[type];
 
-      for (let i = animList.length - 1; i >= 0; i--) {
-        const anim = animList[i];
+      // If there are ANY animations in this list
+      if (animList.length > 0) {
+        hasActiveAnimations = true;
 
-        if (anim.isPlaying) {
-          const active = anim.update();
-          if (active) {
+        for (let i = animList.length - 1; i >= 0; i--) {
+          const anim = animList[i];
+
+          if (anim.isPlaying) {
+            const active = anim.update();
+            if (active) {
+              anim.draw();
+            } else {
+              animList.splice(i, 1);
+            }
+          } else if (anim.isLoaded) {
+            // Draw loading animations too
             anim.draw();
-            hasActiveAnimations = true;
-          } else {
-            animList.splice(i, 1);
           }
-        } else if (anim.isLoaded) {
-          // Draw even if not "playing" yet
-          anim.draw();
-          hasActiveAnimations = true;
         }
       }
     });
@@ -80,10 +78,18 @@ class AnimationManager {
     ctx.fillText(`Explosions: ${animations.explosions.length}`, 20, 30);
     ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
 
-    // Continue loop if any animations exist
-    if (hasActiveAnimations) {
-      animationLoopId = requestAnimationFrame(AnimationManager.gameLoop);
+    // ⭐ SIMPLER CHECK: If ANY animations exist, keep looping
+    const totalAnimations = Object.values(animations).reduce(
+      (total, list) => total + list.length,
+      0,
+    );
+
+    if (totalAnimations > 0) {
+      animationLoopId = requestAnimationFrame(() =>
+        AnimationManager.gameLoop(),
+      );
     } else {
+      console.log("⏹️ Stopping animation loop - no animations");
       animationLoopId = null;
     }
   }
@@ -92,7 +98,11 @@ class AnimationManager {
     Object.keys(animations).forEach((type) => {
       animations[type] = [];
     });
-    AnimationManager.stopLoop();
+
+    if (animationLoopId) {
+      cancelAnimationFrame(animationLoopId);
+      animationLoopId = null;
+    }
 
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -101,5 +111,17 @@ class AnimationManager {
   }
 }
 
-// Make AnimationManager available globally
+// ⭐ AUTO-START: Start loop immediately when page loads
+window.addEventListener("load", () => {
+  console.log("🚀 Animation Manager loaded and ready!");
+
+  // Create a hidden dummy animation to kickstart the loop
+  setTimeout(() => {
+    if (!animationLoopId) {
+      console.log("⚡ Auto-starting animation loop");
+      AnimationManager.startLoop();
+    }
+  }, 500);
+});
+
 window.AnimationManager = AnimationManager;
