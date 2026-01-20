@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Explosion Animation</title>
+    <title>Animation System</title>
     <style>
       body {
         margin: 0;
@@ -44,13 +44,22 @@
         transition: all 0.2s;
       }
 
-      #createBtn {
+      #explosionBtn {
         background: #e74c3c;
         color: white;
       }
 
-      #createBtn:hover {
+      #explosionBtn:hover {
         background: #c0392b;
+      }
+
+      #flameBtn {
+        background: #ff9900;
+        color: white;
+      }
+
+      #flameBtn:hover {
+        background: #e68a00;
       }
 
       #clearBtn {
@@ -61,39 +70,32 @@
       #clearBtn:hover {
         background: #95a5a6;
       }
-
-      .info {
-        color: #aaa;
-        margin-top: 20px;
-        font-size: 14px;
-      }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>💥 Explosion Animation</h1>
-      <p style="color: #ccc">
-        Click "Create Explosion" to add explosions at random positions
-      </p>
+      <h1>🎮 Animation System</h1>
+      <p style="color: #ccc">Multiple animations running smoothly together</p>
 
       <canvas id="gameCanvas" width="800" height="500"></canvas>
 
       <div class="controls">
-        <button id="createBtn" onclick="createExplosion()">
+        <button id="explosionBtn" onclick="createExplosion()">
           Create Explosion
         </button>
-        <button id="createBtn" onclick="createExplosion()">
-          Create Explosion
+        <button id="flameBtn" onclick="createFlame()">Create Flame</button>
+        <button id="clearBtn" onclick="AnimationManager.clearAll()">
+          Clear All
         </button>
-        <button id="clearBtn" onclick="clearExplosions()">Clear All</button>
-      </div>
-
-      <div class="info">
-        Each explosion plays through 26 frames with random size and speed
       </div>
     </div>
 
+    <!-- Load in correct order -->
+    <script src="assets/JS/animations.js"></script>
+    <!-- First: Manager -->
     <script src="assets/JS/explosion.js"></script>
+    <!-- Second: Animation 1 -->
     <script src="assets/JS/flame.js"></script>
+    <!-- Third: Animation 2 -->
   </body>
 </html>
