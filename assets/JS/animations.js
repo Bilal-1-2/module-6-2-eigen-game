@@ -2,8 +2,7 @@
 const animations = {
   explosions: [],
   flames: [],
-  smokes: [],
-  sparkles: [],
+  soldiers: [],
 };
 
 let animationLoopId = null;
@@ -77,6 +76,7 @@ class AnimationManager {
     ctx.font = "16px Arial";
     ctx.fillText(`Explosions: ${animations.explosions.length}`, 20, 30);
     ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
+    ctx.fillText(`Soldiers: ${animations.soldiers.length}`, 20, 70);
 
     // ⭐ SIMPLER CHECK: If ANY animations exist, keep looping
     const totalAnimations = Object.values(animations).reduce(
