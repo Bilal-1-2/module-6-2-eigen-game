@@ -98,11 +98,11 @@ class AnimationManager {
     });
 
     // Draw counters with dark text for white background
-    ctx.fillStyle = "#333333";
-    ctx.font = "16px Arial";
-    ctx.fillText(`Explosions: ${animations.explosions.length}`, 20, 30);
-    ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
-    ctx.fillText(`Soldiers: ${animations.soldiers.length}`, 20, 70);
+    // ctx.fillStyle = "#333333";
+    // ctx.font = "16px Arial";
+    // ctx.fillText(`Explosions: ${animations.explosions.length}`, 20, 30);
+    // ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
+    // ctx.fillText(`Soldiers: ${animations.soldiers.length}`, 20, 70);
 
     // If ANY animations exist, keep looping
     const totalAnimations = Object.values(animations).reduce(
