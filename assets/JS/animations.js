@@ -11,17 +11,19 @@ let animationLoopId = null;
 class AnimationManager {
   static add(animation, type) {
     if (animations[type]) {
+      // LIMIT: Don't allow more than 5 soldiers
+      if (type === "soldiers" && animations[type].length >= 5) {
+        console.warn("⚠️ Too many soldiers, removing oldest");
+        const removed = animations[type].shift();
+        if (removed && removed.cleanup) removed.cleanup();
+      }
+
       animations[type].push(animation);
 
-      // ⭐ CRITICAL FIX: Always try to start loop when adding animation
-      AnimationManager.startLoop();
-
-      // ⭐ DOUBLE CHECK: If loop didn't start, force it
+      // Start loop ONLY if not already running
       if (!animationLoopId) {
         console.log(`Starting animation loop for ${type}`);
-        animationLoopId = requestAnimationFrame(() =>
-          AnimationManager.gameLoop(),
-        );
+        AnimationManager.startLoop();
       }
     }
   }
@@ -36,23 +38,23 @@ class AnimationManager {
   }
 
   static gameLoop() {
+    // Safety check
+    if (!animationLoopId) return;
+
     const canvas = document.getElementById("gameCanvas");
+    if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
 
     // Clear canvas
     ctx.fillStyle = "#0a0a0a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    let hasActiveAnimations = false;
-
     // Check ALL animation types
     Object.keys(animations).forEach((type) => {
       const animList = animations[type];
 
-      // If there are ANY animations in this list
       if (animList.length > 0) {
-        hasActiveAnimations = true;
-
         for (let i = animList.length - 1; i >= 0; i--) {
           const anim = animList[i];
 
@@ -78,7 +80,7 @@ class AnimationManager {
     ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
     ctx.fillText(`Soldiers: ${animations.soldiers.length}`, 20, 70);
 
-    // ⭐ SIMPLER CHECK: If ANY animations exist, keep looping
+    // If ANY animations exist, keep looping
     const totalAnimations = Object.values(animations).reduce(
       (total, list) => total + list.length,
       0,
@@ -95,21 +97,74 @@ class AnimationManager {
   }
 
   static clearAll() {
+    // Cleanup each animation first
     Object.keys(animations).forEach((type) => {
+      animations[type].forEach((anim) => {
+        if (anim && anim.cleanup) anim.cleanup();
+      });
       animations[type] = [];
     });
 
+    // Stop loop
     if (animationLoopId) {
       cancelAnimationFrame(animationLoopId);
       animationLoopId = null;
     }
 
+    // Clear canvas
     const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Reset canvas to clear GPU memory
+      canvas.width = canvas.width;
+    }
   }
 }
+
+// Nuclear cleanup on page unload
+window.addEventListener("beforeunload", () => {
+  console.log("☢️ Nuclear cleanup starting...");
+
+  // 1. Cancel animation loop FIRST
+  if (animationLoopId) {
+    cancelAnimationFrame(animationLoopId);
+    animationLoopId = null;
+  }
+
+  // 2. Clear all animation arrays
+  Object.keys(animations).forEach((key) => {
+    animations[key] = [];
+  });
+
+  // 3. Nullify ALL global references
+  const globalsToClear = [
+    "currentSoldier",
+    "Soldier",
+    "createSoldier",
+    "toggleSoldierRun",
+    "AnimationManager",
+    "KeyboardManager",
+    "soldierCount",
+  ];
+
+  globalsToClear.forEach((global) => {
+    try {
+      delete window[global];
+    } catch (e) {
+      window[global] = null;
+    }
+  });
+
+  // 4. Clear any canvas contexts
+  const canvas = document.getElementById("gameCanvas");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  console.log("✅ Cleanup complete");
+});
 
 // ⭐ AUTO-START: Start loop immediately when page loads
 window.addEventListener("load", () => {
