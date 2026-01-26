@@ -27,7 +27,7 @@
         display: block;
         margin: 20px auto;
         border: 2px solid #333;
-        background: #000;
+        background: #ffffff;
       }
 
       .controls {
@@ -83,6 +83,8 @@
         <button id="explosionBtn" onclick="createExplosion()">
           Create Explosion
         </button>
+        <button onclick="createSoldier(100, 300)">Add Soldier</button>
+        <button onclick="createSoldier(200, 300)">Add Another</button>
         <button id="flameBtn" onclick="createFlame()">Create Flame</button>
         <button id="clearBtn" onclick="AnimationManager.clearAll()">
           Clear All
@@ -90,12 +92,13 @@
       </div>
     </div>
 
-    <!-- Load in correct order -->
-    <script src="assets/JS/animations.js"></script>
     <!-- First: Manager -->
-    <script src="assets/JS/explosion.js"></script>
+    <script src="assets/JS/animations.js"></script>
     <!-- Second: Animation 1 -->
+    <script src="assets/JS/explosion.js"></script>
+    <!-- Second: Animation 2 -->
     <script src="assets/JS/flame.js"></script>
-    <!-- Third: Animation 2 -->
+    <!-- Third: Animation 3 -->
+    <script src="assets/JS/soldier.js"></script>
   </body>
 </html>
