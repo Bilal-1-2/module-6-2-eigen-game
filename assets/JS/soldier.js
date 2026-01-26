@@ -93,9 +93,12 @@ class Soldier {
     this.maxFrameWidth = Math.max(...this.frames.map((f) => f.width));
     this.maxFrameHeight = Math.max(...this.frames.map((f) => f.height));
 
-    // Position offsets - center horizontally, feet at bottom
-    this.drawOffsetX = this.maxFrameWidth / 2; // Center horizontally
-    this.drawOffsetY = this.maxFrameHeight; // Feet at (x, y), body above
+    // Scale factor to make soldiers flexible with screen size (based on width, reference 1920px = scale 4)
+    this.scale = (this.canvas.width / 1420) * 1;
+
+    // Position offsets - center horizontally, feet at bottom, scaled
+    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2; // Center horizontally
+    this.drawOffsetY = this.maxFrameHeight * this.scale; // Feet at (x, y), body above
 
     this.loadSpriteSheets();
     this.setupControls();
@@ -261,14 +264,14 @@ class Soldier {
   drawHealthBar() {
     if (!this.isLoaded || this.health >= this.maxHealth) return;
 
-    const healthBarWidth = 50;
-    const healthBarHeight = 6;
-    const healthBarYOffset = -10; // Above the soldier
+    const healthBarWidth = 50 * this.scale;
+    const healthBarHeight = 6 * this.scale;
+    const healthBarYOffset = -10 * this.scale; // Above the soldier
 
     const barX = this.x - healthBarWidth / 2;
-    const barY = this.y - this.maxFrameHeight + healthBarYOffset;
+    const barY = this.y - this.maxFrameHeight * this.scale + healthBarYOffset;
 
-    this.ctx.fillStyle = "rgba(0,0,0,0.7)";
+    this.ctx.fillStyle = "rgba(123, 50, 50, 0.7)";
     this.ctx.fillRect(barX, barY, healthBarWidth, healthBarHeight);
 
     const healthPercent = this.health / this.maxHealth;
@@ -318,14 +321,22 @@ class Soldier {
   draw() {
     if (!this.isLoaded) return;
 
+    // Update scale based on current canvas size for flexibility
+    this.scale = (this.canvas.width / 1920) * 4;
+    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2;
+    this.drawOffsetY = this.maxFrameHeight * this.scale;
+
     const frame = this.activeFrames[this.currentFrame];
+
+    // Calculate scaled dimensions
+    const scaledWidth = frame.width * this.scale;
+    const scaledHeight = frame.height * this.scale;
 
     // Calculate where to draw on canvas
     // For consistent positioning, we'll draw each frame centered horizontally
     // and aligned at the feet vertically
-    const frameCenterOffsetX = frame.width / 2;
-    const drawX = this.x - frameCenterOffsetX;
-    const drawY = this.y - frame.height; // Feet at (x, y)
+    const drawX = this.x - scaledWidth / 2;
+    const drawY = this.y - scaledHeight; // Feet at (x, y)
 
     if (this.isTakingDamage && this.damageFlashTimer > 0) {
       // Flash red overlay
@@ -362,10 +373,10 @@ class Soldier {
           frame.y,
           frame.width,
           frame.height,
-          -drawX - frame.width,
+          -drawX - scaledWidth,
           drawY,
-          frame.width,
-          frame.height,
+          scaledWidth,
+          scaledHeight,
         );
       } else {
         this.ctx.drawImage(
@@ -376,8 +387,8 @@ class Soldier {
           frame.height,
           drawX,
           drawY,
-          frame.width,
-          frame.height,
+          scaledWidth,
+          scaledHeight,
         );
       }
     } else {
@@ -390,10 +401,10 @@ class Soldier {
           frame.y,
           frame.width,
           frame.height,
-          -drawX - frame.width,
+          -drawX - scaledWidth,
           drawY,
-          frame.width,
-          frame.height,
+          scaledWidth,
+          scaledHeight,
         );
       } else {
         this.ctx.drawImage(
@@ -404,8 +415,8 @@ class Soldier {
           frame.height,
           drawX,
           drawY,
-          frame.width,
-          frame.height,
+          scaledWidth,
+          scaledHeight,
         );
       }
     }
@@ -414,13 +425,13 @@ class Soldier {
 
     // DEBUG: Draw green bounding box around current frame
     this.ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-    this.ctx.strokeRect(drawX, drawY, frame.width, frame.height);
+    this.ctx.strokeRect(drawX, drawY, scaledWidth, scaledHeight);
 
     // DEBUG: Draw yellow center line
     this.ctx.strokeStyle = "rgba(255, 255, 0, 0.3)";
     this.ctx.beginPath();
     this.ctx.moveTo(this.x, drawY);
-    this.ctx.lineTo(this.x, drawY + frame.height);
+    this.ctx.lineTo(this.x, drawY + scaledHeight);
     this.ctx.stroke();
     this.drawHealthBar();
   }

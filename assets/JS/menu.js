@@ -18,6 +18,15 @@ function showScreen(screenId) {
     currentScreen = screenId;
   }
 }
+
+function resizeCanvas() {
+  const canvas = document.getElementById("gameCanvas");
+  if (canvas) {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    console.log(`Canvas resized to: ${canvas.width}x${canvas.height}`);
+  }
+}
 function startGame() {
   console.log("🚀 Starting game!");
 
@@ -47,6 +56,9 @@ function newGame() {
   window.currentSoldier = null;
   window.soldierCount = 0;
 
+  // Resize canvas to full screen
+  resizeCanvas();
+
   // Show game screen
   showScreen("gameScreen");
 
@@ -58,7 +70,7 @@ function newGame() {
   // Create new soldier
   setTimeout(() => {
     if (window.createSoldier) {
-      createSoldier(50, 450);
+      createSoldier(150, 900);
     }
   }, 500);
 }
@@ -111,6 +123,8 @@ document.addEventListener("keydown", (event) => {
     else if (currentScreen === "pauseMenu") resumeGame();
   }
 });
+
+window.addEventListener("resize", resizeCanvas);
 
 function resetGame() {
   console.log("🔄 Resetting game...");
