@@ -15,6 +15,7 @@ class Soldier {
     // Spritesheet
     this.walkSpriteSheet = new Image();
     this.runSpriteSheet = new Image();
+    this.deathSpriteSheet = new Image();
 
     // FIXED: Individual frame data (from your measurements)
     this.frames = [
@@ -47,9 +48,30 @@ class Soldier {
       { x: 934, y: 4, width: 37, height: 60 },
     ];
 
+    this.deathFrames = [
+      { x: 18, y: 6, width: 34, height: 58 },
+      { x: 88, y: 6, width: 34, height: 58 },
+      { x: 158, y: 6, width: 34, height: 58 },
+      { x: 228, y: 6, width: 34, height: 58 },
+    ];
+
     this.activeFrames = this.frames;
     this.totalFrames = this.frames.length;
     this.currentFrame = 0;
+
+    this.deathAnimationPlaying = false;
+    this.deathAnimationComplete = false;
+    this.deathFrameIndex = 0;
+    this.deathAnimationSpeed = 300;
+    this.lastDeathFrameUpdate = Date.now();
+
+    // Health
+
+    this.health = 100;
+    this.maxHealth = 100;
+    this.isAlive = true;
+    this.isTakingDamage = false;
+    this.damageFlashTimer = 0;
 
     // Animation timing
     this.speed = 100;
@@ -107,6 +129,14 @@ class Soldier {
       console.error("❌ Failed to load running spritesheet!");
     };
     this.runSpriteSheet.src = "assets/soldier/Soldier_1/Run.png";
+
+    this.deathSpriteSheet.onload = () => {
+      console.log("✅ Running spritesheet loaded!");
+    };
+    this.deathSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load running spritesheet!");
+    };
+    this.deathSpriteSheet.src = "assets/soldier/Soldier_1/dead.png";
   }
 
   setupControls() {
@@ -177,8 +207,29 @@ class Soldier {
 
   update() {
     if (!this.isLoaded) return true;
+    if (!this.isAlive && this.deathAnimationComplete) return false;
 
     const now = Date.now();
+
+    // Handle death animation
+    if (this.deathAnimationPlaying) {
+      if (now - this.lastDeathFrameUpdate >= this.deathAnimationSpeed) {
+        this.deathFrameIndex++;
+        this.currentFrame = this.deathFrameIndex;
+        this.lastDeathFrameUpdate = now;
+
+        // Check if death animation is complete
+        if (this.deathFrameIndex >= this.deathFrames.length) {
+          // FIXED
+          this.deathAnimationPlaying = false;
+          this.deathAnimationComplete = true;
+          this.currentFrame = this.deathFrames.length - 1;
+        }
+      }
+      return true;
+    }
+
+    // Original movement code continues here...
     const isMoving =
       this.keys["a"] || this.keys["d"] || this.keys["w"] || this.keys["s"];
 
@@ -202,10 +253,66 @@ class Soldier {
     );
     this.y = Math.max(
       padding + this.drawOffsetY,
-      Math.min(this.canvas.height - padding - this.drawOffsetY, this.y),
+      Math.min(this.canvas.height - padding, this.y),
     );
 
     return true;
+  }
+  drawHealthBar() {
+    if (!this.isLoaded || this.health >= this.maxHealth) return;
+
+    const healthBarWidth = 50;
+    const healthBarHeight = 6;
+    const healthBarYOffset = -10; // Above the soldier
+
+    const barX = this.x - healthBarWidth / 2;
+    const barY = this.y - this.maxFrameHeight + healthBarYOffset;
+
+    this.ctx.fillStyle = "rgba(0,0,0,0.7)";
+    this.ctx.fillRect(barX, barY, healthBarWidth, healthBarHeight);
+
+    const healthPercent = this.health / this.maxHealth;
+    const healthWidth = healthBarWidth * healthPercent;
+
+    if (healthPercent > 0.5) {
+      this.ctx.fillStyle = "#4CAF50";
+    } else if (healthPercent > 0.25) {
+      this.ctx.fillStyle = "#FF9800";
+    } else {
+      this.ctx.fillStyle = "#F44336";
+    }
+
+    this.ctx.fillRect(barX, barY, healthWidth, healthBarHeight);
+
+    this.ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(barX, barY, healthBarWidth, healthBarHeight);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return false;
+
+    this.health = Math.max(0, this.health - amount);
+    this.damageFlashTimer = 10;
+    this.isTakingDamage = true;
+
+    if (this.health <= 0) {
+      this.isAlive = false;
+      this.isPlaying = false;
+      this.startDeathAnimation();
+      console.log("💀 Soldier has died.");
+    }
+    return true;
+  }
+  startDeathAnimation() {
+    this.deathAnimationPlaying = true;
+    this.deathAnimationComplete = false;
+    this.deathFrameIndex = 0;
+    this.lastDeathFrameUpdate = Date.now();
+
+    this.activeFrames = this.deathFrames;
+    this.totalFrames = this.deathFrames.length;
+    this.currentFrame = 0;
   }
 
   draw() {
@@ -220,41 +327,87 @@ class Soldier {
     const drawX = this.x - frameCenterOffsetX;
     const drawY = this.y - frame.height; // Feet at (x, y)
 
+    if (this.isTakingDamage && this.damageFlashTimer > 0) {
+      // Flash red overlay
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5;
+      // this.ctx.fillStyle = "#FF0000";
+      // this.ctx.fillRect(
+      //   this.x - this.drawOffsetX,
+      //   this.y - this.drawOffsetY,
+      //   this.maxFrameWidth,
+      //   this.maxFrameHeight,
+      // );
+      this.ctx.restore(); // Move this inside the if block
+
+      this.damageFlashTimer--;
+      if (this.damageFlashTimer <= 0) {
+        this.isTakingDamage = false;
+      }
+    }
+
     // DEBUG: Draw the center point (red dot at soldier's feet)
     this.ctx.fillStyle = "red";
     this.ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
 
     this.ctx.save();
 
-    if (this.direction === -1) {
-      // Facing left: flip horizontally
-      this.ctx.scale(-1, 1);
-
-      // For flipped drawing: adjust X position
-      this.ctx.drawImage(
-        this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
-        frame.x,
-        frame.y, // Source: crop from spritesheet
-        frame.width,
-        frame.height, // Source size
-        -drawX - frame.width, // Destination X (flipped)
-        drawY, // Destination Y
-        frame.width,
-        frame.height, // Destination size
-      );
+    if (this.deathAnimationPlaying || this.deathAnimationComplete) {
+      // Draw death animation
+      if (this.direction === -1) {
+        this.ctx.scale(-1, 1);
+        this.ctx.drawImage(
+          this.deathSpriteSheet,
+          frame.x,
+          frame.y,
+          frame.width,
+          frame.height,
+          -drawX - frame.width,
+          drawY,
+          frame.width,
+          frame.height,
+        );
+      } else {
+        this.ctx.drawImage(
+          this.deathSpriteSheet,
+          frame.x,
+          frame.y,
+          frame.width,
+          frame.height,
+          drawX,
+          drawY,
+          frame.width,
+          frame.height,
+        );
+      }
     } else {
-      // Facing right: normal
-      this.ctx.drawImage(
-        this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
-        frame.x,
-        frame.y,
-        frame.width,
-        frame.height,
-        drawX,
-        drawY,
-        frame.width,
-        frame.height,
-      );
+      // Draw normal walk/run animation (original code)
+      if (this.direction === -1) {
+        this.ctx.scale(-1, 1);
+        this.ctx.drawImage(
+          this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
+          frame.x,
+          frame.y,
+          frame.width,
+          frame.height,
+          -drawX - frame.width,
+          drawY,
+          frame.width,
+          frame.height,
+        );
+      } else {
+        this.ctx.drawImage(
+          this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
+          frame.x,
+          frame.y,
+          frame.width,
+          frame.height,
+          drawX,
+          drawY,
+          frame.width,
+          frame.height,
+        );
+      }
     }
 
     this.ctx.restore();
@@ -269,6 +422,7 @@ class Soldier {
     this.ctx.moveTo(this.x, drawY);
     this.ctx.lineTo(this.x, drawY + frame.height);
     this.ctx.stroke();
+    this.drawHealthBar();
   }
 }
 function toggleSoldierRun() {
@@ -294,3 +448,13 @@ function createSoldier(x, y) {
 
 window.Soldier = Soldier;
 window.createSoldier = createSoldier;
+
+function damageCurrentSoldier(amount = 10) {
+  if (window.currentSoldier) {
+    window.currentSoldier.takeDamage(amount);
+  } else {
+    console.log("No soldier to damage!");
+  }
+}
+
+window.damageCurrentSoldier = damageCurrentSoldier;

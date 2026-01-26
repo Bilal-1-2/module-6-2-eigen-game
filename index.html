@@ -83,12 +83,21 @@
         <button id="explosionBtn" onclick="createExplosion()">
           Create Explosion
         </button>
-        <button onclick="createSoldier(100, 300)">Add Soldier (WSAD)</button>
+        <button onclick="createSoldier(50, 450)">Add Soldier (WSAD)</button>
         <!-- Add this button to your controls section -->
         <button onclick="toggleSoldierRun()">Toggle Run/Walk</button>
         <button id="flameBtn" onclick="createFlame()">Create Flame</button>
         <button id="clearBtn" onclick="AnimationManager.clearAll()">
           Clear All
+        </button>
+        <button onclick="damageCurrentSoldier(10)">
+          Damage Soldier (-10 HP)
+        </button>
+        <button onclick="damageCurrentSoldier(25)">
+          Heavy Damage (-25 HP)
+        </button>
+        <button onclick="window.currentSoldier.health = 100">
+          Heal Soldier
         </button>
       </div>
     </div>

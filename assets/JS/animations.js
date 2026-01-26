@@ -1,4 +1,4 @@
-// animations.js - FIXED VERSION
+// animations.js - FIXED VERSION with Background
 const animations = {
   explosions: [],
   flames: [],
@@ -6,6 +6,8 @@ const animations = {
 };
 
 let animationLoopId = null;
+let backgroundImage = null;
+let backgroundLoaded = false;
 
 // Animation Manager Class
 class AnimationManager {
@@ -28,6 +30,22 @@ class AnimationManager {
     }
   }
 
+  static loadBackground() {
+    backgroundImage = new Image();
+
+    backgroundImage.onload = function () {
+      backgroundLoaded = true;
+      console.log("✅ Background image loaded successfully");
+    };
+
+    backgroundImage.onerror = function () {
+      console.error("❌ Failed to load background image");
+      backgroundLoaded = false;
+    };
+
+    backgroundImage.src = "assets/backgrounds/winter2/3/10.png";
+  }
+
   static startLoop() {
     if (!animationLoopId) {
       console.log("🔄 Starting main animation loop");
@@ -46,9 +64,15 @@ class AnimationManager {
 
     const ctx = canvas.getContext("2d");
 
-    // Clear canvas
-    ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Draw background FIRST
+    if (backgroundLoaded && backgroundImage) {
+      // Draw the loaded image
+      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+    } else {
+      // Fallback to white background while image loads
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // Check ALL animation types
     Object.keys(animations).forEach((type) => {
@@ -73,8 +97,8 @@ class AnimationManager {
       }
     });
 
-    // Draw counters
-    ctx.fillStyle = "#ffffff";
+    // Draw counters with dark text for white background
+    ctx.fillStyle = "#333333";
     ctx.font = "16px Arial";
     ctx.fillText(`Explosions: ${animations.explosions.length}`, 20, 30);
     ctx.fillText(`Flames: ${animations.flames.length}`, 20, 50);
@@ -169,6 +193,9 @@ window.addEventListener("beforeunload", () => {
 // ⭐ AUTO-START: Start loop immediately when page loads
 window.addEventListener("load", () => {
   console.log("🚀 Animation Manager loaded and ready!");
+
+  // Load background image
+  AnimationManager.loadBackground();
 
   // Create a hidden dummy animation to kickstart the loop
   setTimeout(() => {
