@@ -1,165 +1,199 @@
 class Soldier {
-  constructor(startX, startY, targetX, targetY) {
-    this.x = startX;
-    this.y = startY;
-    this.startX = startX;
-    this.startY = startY;
-    this.targetX = targetX;
-    this.targetY = targetY;
+  constructor(x, y) {
+    // Position on canvas
+    this.x = x;
+    this.y = y;
 
+    // Canvas context for drawing
     this.canvas = document.getElementById("gameCanvas");
     this.ctx = this.canvas.getContext("2d");
 
+    // Spritesheet
     this.walkSpriteSheet = new Image();
-    this.frames = [];
-    this.currentFrame = 0;
-    this.totalFrames = 8;
-    this.isPlaying = false;
-    this.isLoaded = false;
-    this.isMoving = false;
 
-    this.frameWidth = 112;
-    this.frameHeight = 68;
-    this.columns = 8;
+    // Animation properties
+    this.currentFrame = 0; // Which frame to show (0-7)
+    this.totalFrames = 8; // You have 8 frames total
 
-    this.speed = 100; // milliseconds per frame
-    this.walkSpeed = 2; // pixels per update
-    this.direction = 1; // 1 for right, -1 for left
-    this.lastUpdate = 0;
+    // Your frame dimensions
+    this.frameWidth = 112; // Width of EACH frame in spritesheet
+    this.frameHeight = 68; // Height of EACH frame
 
+    // Animation timing
+    this.speed = 100; // Milliseconds between frames
+    this.lastUpdate = Date.now(); // When last frame changed
+
+    // Movement
+    this.walkSpeed = 5; // Pixels to move per update
+    this.direction = 1; // 1 = right, -1 = left
+
+    // State
+    this.isPlaying = false; // Is animation running?
+    this.isLoaded = false; // Is spritesheet loaded?
+
+    // Keyboard controls
+    this.keys = {}; // Store which keys are pressed
+
+    // Load images and setup controls
     this.loadSpriteSheet();
+    this.setupControls();
   }
 
   loadSpriteSheet() {
     this.walkSpriteSheet.onload = () => {
-      console.log("Soldier sprite sheet loaded");
-      this.isLoaded = true;
-      // this.start();
+      console.log("✅ Soldier spritesheet loaded!");
+      this.isLoaded = true; // FIXED: Changed from "isLOaded" to "isLoaded"
+      this.draw(); // Draw immediately when loaded
     };
+
     this.walkSpriteSheet.onerror = () => {
-      console.error("Failed to load soldier sprite sheet");
+      console.error("❌ Failed to load soldier spritesheet!");
     };
+
     this.walkSpriteSheet.src = "assets/soldier/Soldier_1/Walk2.png";
   }
 
-  // start() {
-  //   if (!this.isLoaded) return;
-  //   this.isPlaying = true;
-  //   this.currentFrame = 0;
-  //   this.lastUpdate = Date.now();
-  //   this.draw();
-  // }
+  setupControls() {
+    // Listen for key DOWN events
+    document.addEventListener("keydown", (event) => {
+      this.keys[event.key.toLowerCase()] = true;
+      this.checkMovement(); // Check movement immediately when key is pressed
+    });
 
-  startWalking() {
-    if (!this.isLOaded) return;
-
-    const dx = this.targetX - this.startX;
-    const dy = this.targetY - this.startY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    this.direction = dx > 0 ? 1 : -1;
-
-    this.isPLaying = true;
-    this.isMoving = true;
-    this.currentFrame = 0;
-    this.lastUPdate = Date.now();
+    // Listen for key UP events
+    document.addEventListener("keyup", (event) => {
+      this.keys[event.key.toLowerCase()] = false;
+      this.checkMovement();
+    });
   }
+
+  checkMovement() {
+    const movingLeft = this.keys["a"];
+    const movingRight = this.keys["d"];
+    const movingUp = this.keys["w"];
+    const movingDown = this.keys["s"];
+
+    // If ANY movement key is pressed
+    if (movingLeft || movingRight || movingUp || movingDown) {
+      // Start animation if not already playing
+      if (!this.isPlaying && this.isLoaded) {
+        this.isPlaying = true;
+        this.currentFrame = 0;
+        this.lastUpdate = Date.now();
+      }
+
+      // Set direction for animation (left/right)
+      if (movingLeft) {
+        this.direction = -1; // Face left
+      } else if (movingRight) {
+        this.direction = 1; // Face right
+      }
+      // If moving up/down only, keep last direction
+    } else {
+      // No keys pressed - stop animation
+      this.isPlaying = false;
+    }
+  }
+
   update() {
-    if (!this.isPlaying || !this.isLoaded) return false;
+    // Always return true to keep soldier alive
+    if (!this.isLoaded) return true;
 
     const now = Date.now();
-    if (now - this.lastUpdate >= this.speed) {
+
+    // Advance animation frame if playing and enough time passed
+    if (this.isPlaying && now - this.lastUpdate >= this.speed) {
       this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
       this.lastUpdate = now;
-
-      // move soldier
-      if (this.isMoving) {
-        const oldX = this.x;
-        const oldY = this.y;
-
-        this.x += this.walkSpeed * this.direction;
-
-        if (this.direction > 0 && this.x >= this.targetX) {
-          this.x = this.targetX;
-          this.isMoving = false;
-          this.onReachedTarget();
-        } else if (this.direction < 0 && this.x <= this.targetX) {
-          this.x = this.targetX;
-          this.isMoving = false;
-          this.onReachedTarget();
-        }
-      }
     }
-    return true;
-  }
-  onReachedTarget() {
-    console.log("Soldier reached target at", this.x, this.y);
-    this.isPLaying = false;
-  }
 
-  getFramePosition() {
-    // Calculate which ROW and COLUMN in spritesheet
-    const col = this.currentFrame % this.columns;
-    const row = Math.floor(this.currentFrame / this.columns);
+    // Move based on pressed keys
+    if (this.keys["a"]) {
+      // A = left
+      this.x -= this.walkSpeed;
+    }
+    if (this.keys["d"]) {
+      // D = right
+      this.x += this.walkSpeed;
+    }
+    if (this.keys["w"]) {
+      // W = up
+      this.y -= this.walkSpeed;
+    }
+    if (this.keys["s"]) {
+      // S = down
+      this.y += this.walkSpeed;
+    }
 
-    return {
-      sx: col * this.frameWidth, // Source X in spritesheet
-      sy: row * this.frameHeight, // Source Y in spritesheet
-      sw: this.frameWidth, // Source width to crop
-      sh: this.frameHeight, // Source height to crop
-    };
+    // Keep soldier on screen
+    this.x = Math.max(50, Math.min(this.canvas.width - 50, this.x));
+    this.y = Math.max(50, Math.min(this.canvas.height - 50, this.y));
+
+    return true; // Soldier stays alive
   }
 
   draw() {
-    if (!this.isPlaying || !this.isLoaded) return;
+    // Don't draw if not loaded
+    if (!this.isLoaded) return;
 
-    const frame = this.getFramePosition();
+    // Calculate which part of spritesheet to show
+    const sourceX = this.currentFrame * this.frameWidth;
+    const sourceY = 0; // All frames on same row
+
+    // Calculate where to draw on canvas (centered)
     const drawX = this.x - this.frameWidth / 2;
     const drawY = this.y - this.frameHeight / 2;
 
+    // Save canvas state
     this.ctx.save();
 
+    // If facing left, flip horizontally
     if (this.direction === -1) {
-      // Flip for left direction
-      this.ctx.scale(-1, 1);
+      this.ctx.scale(-1, 1); // Flip X axis
       this.ctx.drawImage(
         this.walkSpriteSheet,
-        frame.sx,
-        frame.sy,
-        frame.sw,
-        frame.sh, // Source rectangle
-        -drawX - this.frameWidth,
-        drawY, // Flipped position
+        sourceX,
+        sourceY, // Crop FROM spritesheet
         this.frameWidth,
-        this.frameHeight, // Draw size
+        this.frameHeight,
+        -drawX - this.frameWidth, // Draw AT (flipped position)
+        drawY,
+        this.frameWidth,
+        this.frameHeight,
       );
     } else {
-      // Normal for right direction
+      // Facing right - draw normally
       this.ctx.drawImage(
         this.walkSpriteSheet,
-        frame.sx,
-        frame.sy,
-        frame.sw,
-        frame.sh, // Source rectangle
-        drawX,
-        drawY, // Position
+        sourceX,
+        sourceY,
         this.frameWidth,
-        this.frameHeight, // Draw size
+        this.frameHeight,
+        drawX,
+        drawY,
+        this.frameWidth,
+        this.frameHeight,
       );
     }
 
+    // Restore canvas state
     this.ctx.restore();
   }
 }
-const soldier = new Soldier(100, 300, 500, 300);
-soldier.startWalking();
-// function createSoldier(x, y) {
-//   const soldier = new Soldier(x, y);
 
-//   if (typeof AnimationManager !== "undefined") {
-//     AnimationManager.add(soldier, "soldiers");
-//   }
-//   return soldier;
-// }
+function createSoldier(x, y) {
+  const soldier = new Soldier(x, y);
 
-// window.Soldier = Soldier;
-// window.createSoldier = createSoldier;
+  if (typeof AnimationManager !== "undefined") {
+    AnimationManager.add(soldier, "soldiers");
+  }
+
+  // Log for debugging
+  console.log("Soldier created at:", x, y);
+  console.log("Soldier added to AnimationManager");
+
+  return soldier;
+}
+
+window.Soldier = Soldier;
+window.createSoldier = createSoldier;
