@@ -8,6 +8,7 @@ class Soldier {
       window.soldierCount || 0,
     );
     window.soldierCount = (window.soldierCount || 0) + 1;
+
     // Canvas context for drawing
     this.canvas = document.getElementById("gameCanvas");
     this.ctx = this.canvas.getContext("2d");
@@ -15,63 +16,40 @@ class Soldier {
     // Spritesheet
     this.walkSpriteSheet = new Image();
     this.runSpriteSheet = new Image();
-    this.deathSpriteSheet = new Image();
+    this.firingSpriteSheet = new Image();
 
-    // FIXED: Individual frame data (from your measurements)
-    this.frames = [
-      // Frame 0: x=49,  y=1, width=31, height=67
-      { x: 49, y: 1, width: 34, height: 67 },
-      // Frame 1: x=177, y=1, width=32, height=67
-      { x: 177, y: 1, width: 34, height: 67 },
-      // Frame 2: x=303, y=2, width=33, height=66
-      { x: 303, y: 2, width: 33, height: 68 },
-      // Frame 3: x=336, y=1, width=112, height=67 ⚠ (this frame fills the cell)
-      // { x: 336, y: 1, width: 112, height: 67 },
-      // Frame 4: x=448, y=4, width=19, height=64
-      { x: 428, y: 3, width: 34, height: 68 },
-      // Frame 5: x=561, y=0, width=34, height=68
-      { x: 561, y: 3, width: 34, height: 68 },
-      // Frame 6: x=686, y=2, width=35, height=66
-      { x: 686, y: 2, width: 35, height: 68 },
-      // Frame 7: x=814, y=2, width=34, height=66
-      { x: 814, y: 2, width: 34, height: 68 },
-    ];
-
-    this.runFrames = [
-      { x: 38, y: 4, width: 37, height: 60 },
-      { x: 165, y: 4, width: 38, height: 60 },
-      { x: 290, y: 4, width: 41, height: 60 },
-      { x: 420, y: 4, width: 39, height: 60 },
-      { x: 554, y: 3, width: 33, height: 61 },
-      { x: 674, y: 4, width: 41, height: 60 },
-      { x: 801, y: 4, width: 42, height: 60 },
-      { x: 934, y: 4, width: 37, height: 60 },
-    ];
-
-    this.deathFrames = [
-      { x: 18, y: 6, width: 34, height: 58 },
-      { x: 88, y: 6, width: 34, height: 58 },
-      { x: 158, y: 6, width: 34, height: 58 },
-      { x: 228, y: 6, width: 34, height: 58 },
-    ];
+    // Frame arrays (will be populated when sprites load)
+    this.frames = [];
+    this.runFrames = [];
+    this.fireFrames = [];
 
     this.activeFrames = this.frames;
-    this.totalFrames = this.frames.length;
+    this.totalFrames = 0;
     this.currentFrame = 0;
 
-    this.deathAnimationPlaying = false;
-    this.deathAnimationComplete = false;
-    this.deathFrameIndex = 0;
-    this.deathAnimationSpeed = 300;
-    this.lastDeathFrameUpdate = Date.now();
-
     // Health
-
     this.health = 100;
     this.maxHealth = 100;
     this.isAlive = true;
     this.isTakingDamage = false;
     this.damageFlashTimer = 0;
+    this.isMoving = false;
+
+    // Firing properties
+    this.isFiring = false;
+    this.fireFrameIndex = 0;
+    this.fireAnimationLength = 0; // Will be set when fireFrames load
+    this.lastFireUpdate = Date.now();
+    this.fireCooldown = 500;
+    this.lastFireTime = 0;
+    this.fireAnimationSpeed = 80;
+    this.bullets = [];
+    this.bulletSpeed = 15;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.isMouseDown = false;
+    this.lastBulletUpdate = Date.now();
+    this.bulletUpdateSpeed = 16; // ~60 FPS for smooth bullet movement
 
     // Animation timing
     this.speed = 100;
@@ -80,6 +58,7 @@ class Soldier {
     // Movement
     this.walkSpeed = 3;
     this.runSpeed = 6;
+    this.firingSpeed = 1;
 
     this.direction = 1; // 1 = right, -1 = left
     this.isRunning = false;
@@ -89,59 +68,171 @@ class Soldier {
     this.isLoaded = false;
     this.keys = {};
 
-    // Reference dimensions (use the largest frame for positioning)
-    this.maxFrameWidth = Math.max(...this.frames.map((f) => f.width));
-    this.maxFrameHeight = Math.max(...this.frames.map((f) => f.height));
+    // Reference dimensions (will be set after frames are generated)
+    this.maxFrameWidth = 128;
+    this.maxFrameHeight = 128;
 
-    // Scale factor to make soldiers flexible with screen size (based on width, reference 1920px = scale 4)
-    this.scale = (this.canvas.width / 1420) * 1;
+    this.collisionBoxes = {
+      walk: {
+        width: 20, // Measured from walk sprite
+        height: 68, // Measured from walk sprite
+        offsetX: -5, // Center horizontally
+        offsetY: 0, // Adjust up/down if needed
+      },
+      run: {
+        width: 28, // Measured from run sprite
+        height: 60, // Measured from run sprite
+        offsetX: -5,
+        offsetY: 0,
+      },
+      fire: {
+        width: 25, // Measured from fire sprite
+        height: 63, // Measured from fire sprite
+        offsetX: -13, // Might be offset due to gun
+        offsetY: 0,
+      },
+    };
+    this.currentCollisionBox = this.collisionBoxes.walk;
+    // Scale factor
+    this.scale = (this.canvas.width / 1920) * 1;
 
-    // Position offsets - center horizontally, feet at bottom, scaled
-    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2; // Center horizontally
-    this.drawOffsetY = this.maxFrameHeight * this.scale; // Feet at (x, y), body above
+    // Position offsets
+    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2;
+    this.drawOffsetY = this.maxFrameHeight * this.scale;
 
     this.loadSpriteSheets();
     this.setupControls();
+    this.setupMouseControls();
   }
 
+  // ========== REUSABLE FRAME GENERATOR ==========
+  generateFramesFromSheet(spriteSheet, frameWidth = 128, frameHeight = 128) {
+    const numFrames = Math.floor(spriteSheet.width / frameWidth);
+    const frames = [];
+
+    for (let i = 0; i < numFrames; i++) {
+      frames.push({
+        x: i * frameWidth,
+        y: 0,
+        width: frameWidth,
+        height: frameHeight,
+      });
+    }
+
+    return frames;
+  }
+
+  // ========== SPRITE LOADING ==========
   loadSpriteSheets() {
     console.log("📷 Loading sprite sheets...");
 
-    // Add timestamps to prevent caching
-    const timestamp = new Date().getTime();
-
+    // Walk sprite
     this.walkSpriteSheet.onload = () => {
       console.log(
         "✅ Walk sprite loaded, size:",
         this.walkSpriteSheet.width + "x" + this.walkSpriteSheet.height,
       );
+
+      // Generate walk frames
+      this.frames = this.generateFramesFromSheet(this.walkSpriteSheet);
+      this.activeFrames = this.frames;
+      this.totalFrames = this.frames.length;
+
       this.isLoaded = true;
       this.draw();
+
+      console.log(`✅ Generated ${this.frames.length} walk frames`);
     };
 
     this.walkSpriteSheet.onerror = () => {
       console.error("❌ Failed to load soldier spritesheet!");
     };
+    this.walkSpriteSheet.src = "assets/soldier/Soldier_1/Walk.png";
 
-    this.walkSpriteSheet.src = "assets/soldier/Soldier_1/Walk2.png";
-
+    // Run sprite
     this.runSpriteSheet.onload = () => {
       console.log("✅ Running spritesheet loaded!");
+
+      // Generate run frames
+      this.runFrames = this.generateFramesFromSheet(this.runSpriteSheet);
+      console.log(`✅ Generated ${this.runFrames.length} run frames`);
     };
+
     this.runSpriteSheet.onerror = () => {
       console.error("❌ Failed to load running spritesheet!");
     };
     this.runSpriteSheet.src = "assets/soldier/Soldier_1/Run.png";
 
-    this.deathSpriteSheet.onload = () => {
-      console.log("✅ Running spritesheet loaded!");
+    // Firing sprite
+    this.firingSpriteSheet.onload = () => {
+      console.log("✅ Firing spritesheet loaded!");
+
+      // Generate fire frames
+      this.fireFrames = this.generateFramesFromSheet(this.firingSpriteSheet);
+      this.fireAnimationLength = this.fireFrames.length;
+      console.log(`✅ Generated ${this.fireFrames.length} fire frames`);
     };
-    this.deathSpriteSheet.onerror = () => {
-      console.error("❌ Failed to load running spritesheet!");
+
+    this.firingSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load firing spritesheet!");
     };
-    this.deathSpriteSheet.src = "assets/soldier/Soldier_1/dead.png";
+    this.firingSpriteSheet.src = "assets/soldier/Soldier_1/Shot_1.png";
   }
 
+  // ========== COLLISION LOGIC ==========
+  getCurrentCollisionBox() {
+    if (this.isFiring) {
+      return this.collisionBoxes.fire;
+    } else if (this.isRunning) {
+      return this.collisionBoxes.run;
+    } else {
+      return this.collisionBoxes.walk;
+    }
+  }
+
+  checkCollison(pointX, pointY) {
+    const box = this.getCurrentCollisionBox();
+
+    const adjustedOffsetX = box.offsetX * this.direction;
+    const boxCenterX = this.x + adjustedOffsetX * this.scale;
+    const boxTopY = this.y - box.height * this.scale + box.offsetY * this.scale;
+
+    const boxLeftX = boxCenterX - (box.width * this.scale) / 2;
+
+    const isInsideX =
+      pointX >= boxLeftX && pointX <= boxLeftX + box.width * this.scale;
+
+    const isInsideY =
+      pointY >= boxtopY && pointY <= boxTopY + box.height * this.scale;
+
+    return isInsideX && isInsideY;
+  }
+
+  drawCollisionBox() {
+    const box = this.getCurrentCollisionBox();
+
+    const adjustedOffsetX = box.offsetX * this.direction;
+
+    const boxCenterX = this.x + adjustedOffsetX * this.scale;
+    const boxTopY = this.y - box.height * this.scale + box.offsetY * this.scale;
+    const boxLeftX = boxCenterX - (box.width * this.scale) / 2;
+    this.ctx.save();
+    this.ctx.strokeStyle = "rgba(255,0,0,0.7)";
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(
+      boxLeftX,
+      boxTopY,
+      box.width * this.scale,
+      box.height * this.scale,
+    );
+
+    this.ctx.fillStyle = "rgba(0, 0, 255, 0.8)";
+    this.ctx.fillRect(this.x - 3, this.y - 3, 6, 6);
+
+    this.ctx.restore();
+  }
+
+  // ========== CONTROLS ==========
   setupControls() {
     document.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
@@ -159,80 +250,190 @@ class Soldier {
       const key = event.key.toLowerCase();
       if (["w", "a", "s", "d"].includes(key)) {
         this.keys[key] = false;
-        // this.isRunning = false;
         this.checkMovement();
       }
       if (key === "control") {
-        // toggleSoldierRun();
         this.switchAnimationMode();
       }
     });
   }
 
+  setupMouseControls() {
+    // Mouse down (start firing)
+    this.canvas.addEventListener("mousedown", (event) => {
+      if (event.button === 0) {
+        this.isMouseDown = true;
+        this.startFiring();
+      }
+    });
+
+    // Mouse up (stop firing)
+    this.canvas.addEventListener("mouseup", (event) => {
+      if (event.button === 0) {
+        this.isMouseDown = false;
+        this.stopFiring();
+      }
+    });
+
+    // Mouse move (track position only, no direction change)
+    this.canvas.addEventListener("mousemove", (event) => {
+      if (!this.isAlive) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      this.mouseX = event.clientX - rect.left;
+      this.mouseY = event.clientY - rect.top;
+    });
+  }
+
+  // ========== FIRING LOGIC ==========
+  startFiring() {
+    if (this.isFiring || !this.isAlive) return;
+
+    const now = Date.now();
+    if (now - this.lastFireTime < this.fireCooldown) return;
+
+    this.isFiring = true;
+    this.fireFrameIndex = 0;
+    this.lastFireUpdate = now;
+    this.lastFireTime = now;
+
+    if (!this.isMoving) {
+      this.isPlaying = true;
+    }
+
+    this.createBullet();
+  }
+
+  stopFiring() {
+    this.isFiring = false;
+    this.fireFrameIndex = 0;
+  }
+
+  createBullet() {
+    const box = this.getCurrentCollisionBox();
+    // Bullet always fires in the direction soldier is facing
+    const bullet = {
+      x: this.x + this.direction * 10 * this.scale,
+      y: this.y - box.height * this.scale * 0.6,
+      dirX: this.direction,
+      dirY: 0, // Horizontal only
+      speed: this.bulletSpeed,
+      width: 10 * this.scale,
+      height: 4 * this.scale,
+      active: true,
+      color: "#FFD700",
+      damage: 25,
+    };
+
+    this.bullets.push(bullet);
+  }
+
+  updateBullets() {
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const bullet = this.bullets[i];
+      if (!bullet.active) {
+        this.bullets.splice(i, 1);
+        continue;
+      }
+
+      bullet.x += bullet.dirX * bullet.speed;
+      bullet.y += bullet.dirY * bullet.speed;
+
+      if (
+        bullet.x < 0 ||
+        bullet.x > this.canvas.width ||
+        bullet.y < 0 ||
+        bullet.y > this.canvas.height
+      ) {
+        bullet.active = false;
+      }
+    }
+  }
+
+  updateFireAnimation() {
+    if (!this.isFiring) return;
+
+    const now = Date.now();
+
+    if (now - this.lastFireUpdate >= this.fireAnimationSpeed) {
+      this.fireFrameIndex =
+        (this.fireFrameIndex + 1) % this.fireAnimationLength;
+      this.lastFireUpdate = now;
+
+      // Create bullet at the "shooting" frame (usually frame 2)
+      if (this.fireFrameIndex === 2 && this.isMouseDown) {
+        this.createBullet();
+      }
+
+      // Reset for continuous firing
+      if (this.fireFrameIndex === 0 && this.isMouseDown) {
+        if (now - this.lastFireTime >= this.fireCooldown) {
+          this.lastFireTime = now;
+        }
+      }
+    }
+  }
+
+  // ========== MOVEMENT ==========
   checkMovement() {
     const movingLeft = this.keys["a"];
     const movingRight = this.keys["d"];
     const movingUp = this.keys["w"];
     const movingDown = this.keys["s"];
 
-    if (movingLeft || movingRight || movingUp || movingDown) {
+    this.isMoving = movingLeft || movingRight || movingUp || movingDown;
+
+    if (this.isMoving) {
+      // THIS IS THE FIX: Always set isPlaying to true when moving
       if (!this.isPlaying && this.isLoaded) {
         this.isPlaying = true;
         this.currentFrame = 0;
         this.lastUpdate = Date.now();
       }
 
-      if (movingLeft) {
+      if (movingLeft && !movingRight) {
         this.direction = -1;
-      } else if (movingRight) {
+      } else if (movingRight && !movingLeft) {
         this.direction = 1;
       }
     } else {
-      this.isPlaying = false;
+      if (!this.isFiring) {
+        this.isPlaying = false;
+      }
     }
   }
   switchAnimationMode() {
     if (this.isRunning) {
       console.log("Switching to run mode");
       this.activeFrames = this.runFrames;
-      this.currentFrame = this.runFrames;
+      this.totalFrames = this.runFrames.length;
+      this.currentFrame = 0;
       this.speed = 50;
     } else {
       console.log("🚶 Switching to WALK mode");
       this.activeFrames = this.frames;
-      this.currentFrame = this.frames;
+      this.totalFrames = this.frames.length;
+      this.currentFrame = 0;
       this.speed = 100;
     }
 
-    this.currentFrame = 0;
     this.lastUpdate = Date.now();
   }
 
+  // ========== UPDATE LOOP ==========
   update() {
     if (!this.isLoaded) return true;
-    if (!this.isAlive && this.deathAnimationComplete) return false;
+    if (!this.isAlive) return false;
 
     const now = Date.now();
 
-    // Handle death animation
-    if (this.deathAnimationPlaying) {
-      if (now - this.lastDeathFrameUpdate >= this.deathAnimationSpeed) {
-        this.deathFrameIndex++;
-        this.currentFrame = this.deathFrameIndex;
-        this.lastDeathFrameUpdate = now;
-
-        // Check if death animation is complete
-        if (this.deathFrameIndex >= this.deathFrames.length) {
-          // FIXED
-          this.deathAnimationPlaying = false;
-          this.deathAnimationComplete = true;
-          this.currentFrame = this.deathFrames.length - 1;
-        }
-      }
-      return true;
+    this.updateFireAnimation();
+    // Update bullets independently of animation
+    if (now - this.lastBulletUpdate >= this.bulletUpdateSpeed) {
+      this.updateBullets();
+      this.lastBulletUpdate = now;
     }
 
-    // Original movement code continues here...
     const isMoving =
       this.keys["a"] || this.keys["d"] || this.keys["w"] || this.keys["s"];
 
@@ -241,14 +442,22 @@ class Soldier {
       this.lastUpdate = now;
     }
 
-    const currentSpeed = this.isRunning ? this.runSpeed : this.walkSpeed;
+    let currentSpeed;
+    if (this.isFiring) {
+      currentSpeed = this.firingSpeed;
+    } else if (this.isRunning) {
+      currentSpeed = this.runSpeed;
+    } else {
+      currentSpeed = this.walkSpeed;
+    }
+
     // Move soldier
     if (this.keys["a"]) this.x -= currentSpeed;
     if (this.keys["d"]) this.x += currentSpeed;
     if (this.keys["w"]) this.y -= currentSpeed;
     if (this.keys["s"]) this.y += currentSpeed;
 
-    // Keep soldier on screen (account for largest frame)
+    // Keep soldier on screen
     const padding = 30;
     this.x = Math.max(
       padding + this.drawOffsetX,
@@ -261,12 +470,146 @@ class Soldier {
 
     return true;
   }
+
+  // ========== DRAWING ==========
+  draw() {
+    if (!this.isLoaded) return;
+
+    // Update scale
+    this.scale = (this.canvas.width / 1920) * 2.5;
+    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2;
+    this.drawOffsetY = this.maxFrameHeight * this.scale;
+
+    // Choose correct frame based on state
+    let frame;
+    let spriteSheet;
+
+    if (this.isFiring && this.fireFrames.length > 0) {
+      // Use firing animation
+      frame = this.fireFrames[this.fireFrameIndex];
+      spriteSheet = this.firingSpriteSheet;
+    } else {
+      // Use walk/run animation
+      frame = this.activeFrames[this.currentFrame] || this.activeFrames[0];
+      spriteSheet = this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet;
+    }
+
+    // Calculate scaled dimensions
+    const scaledWidth = frame.width * this.scale;
+    const scaledHeight = frame.height * this.scale;
+
+    // Calculate draw position
+    const drawX = this.x - scaledWidth / 2;
+    const drawY = this.y - scaledHeight;
+
+    // Damage flash
+    if (this.isTakingDamage && this.damageFlashTimer > 0) {
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5;
+      this.ctx.restore();
+      this.damageFlashTimer--;
+      if (this.damageFlashTimer <= 0) {
+        this.isTakingDamage = false;
+      }
+    }
+
+    // DEBUG: Draw the center point (red dot at soldier's feet)
+    this.ctx.fillStyle = "red";
+    this.ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
+
+    // Draw soldier
+    this.ctx.save();
+    if (this.direction === -1) {
+      this.ctx.scale(-1, 1);
+      this.ctx.drawImage(
+        spriteSheet,
+        frame.x,
+        frame.y,
+        frame.width,
+        frame.height,
+        -drawX - scaledWidth,
+        drawY,
+        scaledWidth,
+        scaledHeight,
+      );
+    } else {
+      this.ctx.drawImage(
+        spriteSheet,
+        frame.x,
+        frame.y,
+        frame.width,
+        frame.height,
+        drawX,
+        drawY,
+        scaledWidth,
+        scaledHeight,
+      );
+    }
+    this.ctx.restore();
+
+    // DEBUG: Draw green bounding box around current frame
+    this.ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+    this.ctx.strokeRect(drawX, drawY, scaledWidth, scaledHeight);
+
+    // DEBUG: Draw yellow center line
+    this.ctx.strokeStyle = "rgba(255, 255, 0, 0.3)";
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.x, drawY);
+    this.ctx.lineTo(this.x, drawY + scaledHeight);
+    this.ctx.stroke();
+
+    this.drawCollisionBox();
+
+    // Draw bullets
+    this.drawBullets();
+
+    // Draw health bar
+    this.drawHealthBar();
+  }
+
+  drawBullets() {
+    if (!this.bullets.length) return;
+
+    this.ctx.save();
+    for (const bullet of this.bullets) {
+      if (!bullet.active) continue;
+
+      this.ctx.fillStyle = bullet.color;
+      this.ctx.fillRect(
+        bullet.x - bullet.width / 2,
+        bullet.y - bullet.height / 2,
+        bullet.width,
+        bullet.height,
+      );
+
+      // Bullet glow effect
+      this.ctx.shadowColor = bullet.color;
+      this.ctx.shadowBlur = 5;
+      this.ctx.fillRect(
+        bullet.x - bullet.width / 2,
+        bullet.y - bullet.height / 2,
+        bullet.width,
+        bullet.height,
+      );
+      this.ctx.shadowBlur = 0; // Reset shadow
+
+      // Bullet trail
+      this.ctx.beginPath();
+      this.ctx.moveTo(bullet.x - bullet.dirX * 10, bullet.y - bullet.dirY * 10);
+      this.ctx.lineTo(bullet.x, bullet.y);
+      this.ctx.strokeStyle = "rgba(255,215,0,0.5)";
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
+  }
+
   drawHealthBar() {
     if (!this.isLoaded || this.health >= this.maxHealth) return;
 
     const healthBarWidth = 50 * this.scale;
     const healthBarHeight = 6 * this.scale;
-    const healthBarYOffset = -10 * this.scale; // Above the soldier
+    const healthBarYOffset = -10 * this.scale;
 
     const barX = this.x - healthBarWidth / 2;
     const barY = this.y - this.maxFrameHeight * this.scale + healthBarYOffset;
@@ -302,11 +645,11 @@ class Soldier {
     if (this.health <= 0) {
       this.isAlive = false;
       this.isPlaying = false;
-      this.startDeathAnimation();
       console.log("💀 Soldier has died.");
     }
     return true;
   }
+
   startDeathAnimation() {
     this.deathAnimationPlaying = true;
     this.deathAnimationComplete = false;
@@ -317,130 +660,30 @@ class Soldier {
     this.totalFrames = this.deathFrames.length;
     this.currentFrame = 0;
   }
-
-  draw() {
-    if (!this.isLoaded) return;
-
-    // Update scale based on current canvas size for flexibility
-    this.scale = (this.canvas.width / 1920) * 4;
-    this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2;
-    this.drawOffsetY = this.maxFrameHeight * this.scale;
-
-    const frame = this.activeFrames[this.currentFrame];
-
-    // Calculate scaled dimensions
-    const scaledWidth = frame.width * this.scale;
-    const scaledHeight = frame.height * this.scale;
-
-    // Calculate where to draw on canvas
-    // For consistent positioning, we'll draw each frame centered horizontally
-    // and aligned at the feet vertically
-    const drawX = this.x - scaledWidth / 2;
-    const drawY = this.y - scaledHeight; // Feet at (x, y)
-
-    if (this.isTakingDamage && this.damageFlashTimer > 0) {
-      // Flash red overlay
-      this.ctx.save();
-      this.ctx.globalAlpha = 0.5;
-      // this.ctx.fillStyle = "#FF0000";
-      // this.ctx.fillRect(
-      //   this.x - this.drawOffsetX,
-      //   this.y - this.drawOffsetY,
-      //   this.maxFrameWidth,
-      //   this.maxFrameHeight,
-      // );
-      this.ctx.restore(); // Move this inside the if block
-
-      this.damageFlashTimer--;
-      if (this.damageFlashTimer <= 0) {
-        this.isTakingDamage = false;
-      }
-    }
-
-    // DEBUG: Draw the center point (red dot at soldier's feet)
-    this.ctx.fillStyle = "red";
-    this.ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
-
-    this.ctx.save();
-
-    if (this.deathAnimationPlaying || this.deathAnimationComplete) {
-      // Draw death animation
-      if (this.direction === -1) {
-        this.ctx.scale(-1, 1);
-        this.ctx.drawImage(
-          this.deathSpriteSheet,
-          frame.x,
-          frame.y,
-          frame.width,
-          frame.height,
-          -drawX - scaledWidth,
-          drawY,
-          scaledWidth,
-          scaledHeight,
-        );
-      } else {
-        this.ctx.drawImage(
-          this.deathSpriteSheet,
-          frame.x,
-          frame.y,
-          frame.width,
-          frame.height,
-          drawX,
-          drawY,
-          scaledWidth,
-          scaledHeight,
-        );
-      }
-    } else {
-      // Draw normal walk/run animation (original code)
-      if (this.direction === -1) {
-        this.ctx.scale(-1, 1);
-        this.ctx.drawImage(
-          this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
-          frame.x,
-          frame.y,
-          frame.width,
-          frame.height,
-          -drawX - scaledWidth,
-          drawY,
-          scaledWidth,
-          scaledHeight,
-        );
-      } else {
-        this.ctx.drawImage(
-          this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet,
-          frame.x,
-          frame.y,
-          frame.width,
-          frame.height,
-          drawX,
-          drawY,
-          scaledWidth,
-          scaledHeight,
-        );
-      }
-    }
-
-    this.ctx.restore();
-
-    // DEBUG: Draw green bounding box around current frame
-    this.ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-    this.ctx.strokeRect(drawX, drawY, scaledWidth, scaledHeight);
-
-    // DEBUG: Draw yellow center line
-    this.ctx.strokeStyle = "rgba(255, 255, 0, 0.3)";
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.x, drawY);
-    this.ctx.lineTo(this.x, drawY + scaledHeight);
-    this.ctx.stroke();
-    this.drawHealthBar();
-  }
 }
+
+// ========== HELPER FUNCTIONS ==========
 function toggleSoldierRun() {
   if (window.currentSoldier) {
     window.currentSoldier.isRunning = !window.currentSoldier.isRunning;
     window.currentSoldier.switchAnimationMode();
     console.log("Run mode:", window.currentSoldier.isRunning);
+  }
+}
+
+function toggleMouseFiring() {
+  if (window.currentSoldier) {
+    if (window.currentSoldier.isFiring) {
+      window.currentSoldier.stopFiring();
+    } else {
+      window.currentSoldier.startFiring();
+    }
+  }
+}
+
+function clearBullets() {
+  if (window.currentSoldier) {
+    window.currentSoldier.bullets = [];
   }
 }
 
@@ -457,9 +700,6 @@ function createSoldier(x, y) {
   return soldier;
 }
 
-window.Soldier = Soldier;
-window.createSoldier = createSoldier;
-
 function damageCurrentSoldier(amount = 10) {
   if (window.currentSoldier) {
     window.currentSoldier.takeDamage(amount);
@@ -468,4 +708,9 @@ function damageCurrentSoldier(amount = 10) {
   }
 }
 
+// ========== EXPORT TO WINDOW ==========
+window.Soldier = Soldier;
+window.createSoldier = createSoldier;
 window.damageCurrentSoldier = damageCurrentSoldier;
+window.toggleMouseFiring = toggleMouseFiring;
+window.clearBullets = clearBullets;
