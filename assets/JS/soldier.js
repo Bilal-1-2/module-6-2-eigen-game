@@ -18,12 +18,16 @@ class Soldier {
     this.runSpriteSheet = new Image();
     this.firingSpriteSheet = new Image();
     this.idleSpriteSheet = new Image();
+    this.reloadSpriteSheet = new Image();
+    this.meleeSpriteSheet = new Image();
 
     // Frame arrays (will be populated when sprites load)
     this.frames = [];
     this.runFrames = [];
     this.fireFrames = [];
     this.idleFrames = [];
+    this.reloadFrames = [];
+    this.meleeFrames = [];
 
     this.activeFrames = this.frames;
     this.totalFrames = 0;
@@ -36,6 +40,17 @@ class Soldier {
     this.isTakingDamage = false;
     this.damageFlashTimer = 0;
     this.isMoving = false;
+
+    // Dummy enemy for testing bullet damage
+    this.enemy = {
+      x: 400,
+      y: 480,
+      health: 100,
+      maxHealth: 100,
+      width: 50,
+      height: 50,
+      isAlive: true,
+    };
 
     // Firing properties
     this.isFiring = false;
@@ -54,6 +69,24 @@ class Soldier {
     this.bulletUpdateSpeed = 16; // ~60 FPS for smooth bullet movement
     this.bulletInterval = null; // interval handle for independent bullet loop
 
+    // melee attack properties
+    this.isMeleeing = false;
+    this.meleeCooldown = 1500;
+    this.lastMeleeUpdate = Date.now();
+    this.meleeDamage = 30;
+    this.meleeAnimationLength = 0;
+    this.meleeFrameIndex = 0;
+    this.lastMeleeTime = 0;
+
+    // reloading properties
+    this.magazineSize = 30;
+    this.bulletsInMagazine = 30;
+    this.isReloading = false;
+    this.reloadTime = 2500;
+    this.reloadStartTime = 0;
+    this.reloadFrameIndex = 0;
+    this.lastReloadUpdate = Date.now();
+
     // Animation timing
     this.speed = 100;
     this.lastUpdate = Date.now();
@@ -62,6 +95,7 @@ class Soldier {
     this.walkSpeed = 3;
     this.runSpeed = 6;
     this.firingSpeed = 1;
+    this.reloadSpeed = 1.5;
 
     this.direction = 1; // 1 = right, -1 = left
     this.isRunning = false;
@@ -98,6 +132,24 @@ class Soldier {
         width: 20, // Measured from fire sprite
         height: 68, // Measured from fire sprite
         offsetX: -5, // Might be offset due to gun
+        offsetY: 0,
+      },
+      reload: {
+        width: 20, // Measured from fire sprite
+        height: 68, // Measured from fire sprite
+        offsetX: -8, // Might be offset due to gun
+        offsetY: 0,
+      },
+      melee: {
+        width: 20, // Measured from fire sprite
+        height: 68, // Measured from fire sprite
+        offsetX: -8, // Might be offset due to gun
+        offsetY: 0,
+      },
+      meleeattack: {
+        width: 20, // Measured from fire sprite
+        height: 68, // Measured from fire sprite
+        offsetX: 12, // Might be offset due to gun
         offsetY: 0,
       },
     };
@@ -187,7 +239,7 @@ class Soldier {
     };
     this.firingSpriteSheet.src = "assets/soldier/Soldier_1/Shot_1.png";
 
-    // Idle sprite - SEPARATE from firing sprite!
+    // Idle sprite
     this.idleSpriteSheet.onload = () => {
       console.log("✅ Idle spritesheet loaded!");
 
@@ -200,11 +252,38 @@ class Soldier {
       console.error("❌ Failed to load idle spritesheet!");
     };
     this.idleSpriteSheet.src = "assets/soldier/Soldier_1/Idle.png";
+
+    // reloading sprite
+    this.reloadSpriteSheet.onload = () => {
+      console.log("✅ reloading spritesheet loaded!");
+
+      // Generate idle frames
+      this.reloadFrames = this.generateFramesFromSheet(this.reloadSpriteSheet);
+      console.log(`✅ Generated ${this.reloadFrames.length} reloading frames`);
+    };
+
+    this.reloadSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load reloading spritesheet!");
+    };
+    this.reloadSpriteSheet.src = "assets/soldier/Soldier_1/recharge.png";
+
+    this.meleeSpriteSheet.onload = () => {
+      console.log("melee spritesheet loaded!");
+      this.meleeFrames = this.generateFramesFromSheet(this.meleeSpriteSheet);
+      this.meleeAnimationLength = this.meleeFrames.length;
+      console.log(`Generated ${this.meleeFrames.length} melee frames`);
+    };
+    this.reloadSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load reloading spritesheet!");
+    };
+    this.meleeSpriteSheet.src = "assets/soldier/Soldier_1/Attack.png";
   }
 
   // ========== COLLISION LOGIC ==========
   getCurrentCollisionBox() {
-    if (this.isFiring) {
+    if (this.isReloading) {
+      return this.collisionBoxes.reload;
+    } else if (this.isFiring) {
       return this.collisionBoxes.fire;
     } else if (this.isRunning) {
       return this.collisionBoxes.run;
@@ -235,7 +314,8 @@ class Soldier {
 
   drawCollisionBox() {
     const box = this.getCurrentCollisionBox();
-
+    const testEnemyX = 400;
+    const testEnemyY = 80;
     const adjustedOffsetX = box.offsetX * this.direction;
 
     const boxCenterX = this.x + adjustedOffsetX * this.scale;
@@ -256,7 +336,99 @@ class Soldier {
 
     this.ctx.restore();
   }
+  // ========== RELOADING LOGIC ==========
+  startReloading() {
+    if (this.isReloading || this.isFiring || !this.isAlive || this.isMeleeing)
+      return;
+    if (this.bulletsInMagazine >= this.magazineSize) return; //already full
 
+    console.log(" starting reload...");
+    this.isReloading = true;
+    this.reloadFrameIndex = 0;
+    this.reloadStartTime = Date.now();
+    this.isPlaying = true;
+
+    if (this.isFiring) {
+      this.stopFiring();
+    }
+  }
+
+  stopReloading() {
+    if (!this.isReloading) return;
+
+    this.isReloading = false;
+    this.bulletsInMagazine = this.magazineSize; // Fill magazine
+    this.reloadFrameIndex = 0;
+  }
+
+  updateReloadAnimation() {
+    if (!this.isReloading) return;
+
+    const now = Date.now();
+
+    // Check if reload time is complete
+    if (now - this.reloadStartTime >= this.reloadTime) {
+      this.stopReloading();
+      return;
+    }
+
+    // Update reload animation frames (adjust speed as needed)
+    const reloadAnimationSpeed = 100; // ms per frame
+    if (now - this.lastReloadUpdate >= reloadAnimationSpeed) {
+      if (this.reloadFrames.length > 0) {
+        this.reloadFrameIndex =
+          (this.reloadFrameIndex + 1) % this.reloadFrames.length;
+      }
+      this.lastReloadUpdate = now;
+    }
+  }
+  // ========== MELEE LOGIC ==========
+
+  startMelee() {
+    if (!this.isAlive || this.isMeleeing) return;
+    const now = Date.now();
+    if (now - this.lastMeleeTime > this.meleeCooldown) {
+      if (this.isFiring) {
+        this.stopFiring();
+      }
+      if (this.isReloading) {
+        this.stopReloading();
+      }
+      this.isPlaying = true;
+      this.isMeleeing = true;
+      this.meleeFrameIndex = 0;
+      this.lastMeleeUpdate = now;
+      this.lastMeleeTime = now;
+    }
+  }
+
+  updateMeleeAnimation() {
+    if (!this.isAlive && this.isLoaded) return;
+    const now = Date.now();
+    const meleeAnimationSpeed = 100;
+
+    if (now - this.lastMeleeUpdate >= this.meleeAnimationSpeed) {
+      this.meleeFrameIndex++;
+      this.lastMeleeUpdate = now;
+      if (this.meleeFrameIndex >= this.meleeAnimationLength) {
+        this.stopMelee();
+      }
+    }
+  }
+  stopMelee() {
+    if (!this.isMeleeing) return;
+    this.isMeleeing = false;
+    this.meleeFrameIndex = 0;
+
+    this.isPlaying = true;
+    this.currentFrame = 0;
+    this.lastUpdate = Date.now();
+
+    if (this.isMouseDown && this.bulletsInMagazine > 0) {
+      this.startFiring();
+    } else if (this.isMoving) {
+    }
+  }
   // ========== CONTROLS ==========
   setupControls() {
     document.addEventListener("keydown", (event) => {
@@ -268,6 +440,13 @@ class Soldier {
       if (key === "control") {
         toggleSoldierRun();
         this.switchAnimationMode();
+      }
+
+      if (key === "r") {
+        this.startReloading();
+      }
+      if (key === "e") {
+        this.startMelee();
       }
     });
 
@@ -297,6 +476,9 @@ class Soldier {
       if (event.button === 0) {
         this.isMouseDown = false;
         this.stopFiring();
+        if (this.bulletsInMagazine <= 0) {
+          this.startReloading();
+        }
       }
     });
 
@@ -312,8 +494,13 @@ class Soldier {
 
   // ========== FIRING LOGIC ==========
   startFiring() {
-    if (this.isFiring || !this.isAlive) return;
+    if (this.isFiring || !this.isAlive || this.isMeleeing) return;
 
+    if (this.isReloading) return;
+    if (this.bulletsInMagazine <= 0) {
+      this.startReloading();
+      return;
+    }
     const now = Date.now();
     if (now - this.lastFireTime < this.fireCooldown) return;
 
@@ -333,6 +520,13 @@ class Soldier {
   }
 
   createBullet() {
+    if (this.bulletsInMagazine <= 0) {
+      this.startReloading();
+
+      return;
+    }
+    this.bulletsInMagazine--;
+
     const box = this.getCurrentCollisionBox();
     // Bullet always fires in the direction soldier is facing
     const bullet = {
@@ -368,6 +562,24 @@ class Soldier {
       // Move bullet
       bullet.x += bullet.dirX * bullet.speed;
       bullet.y += bullet.dirY * bullet.speed;
+
+      // Check collision with enemy
+      if (
+        this.enemy.isAlive &&
+        bullet.x >= this.enemy.x - this.enemy.width / 2 &&
+        bullet.x <= this.enemy.x + this.enemy.width / 2 &&
+        bullet.y >= this.enemy.y - this.enemy.height / 2 &&
+        bullet.y <= this.enemy.y + this.enemy.height / 2
+      ) {
+        this.enemy.health -= bullet.damage;
+        console.log(`Enemy hit! Health: ${this.enemy.health}`);
+        bullet.active = false;
+        if (this.enemy.health <= 0) {
+          this.enemy.isAlive = false;
+          console.log("Enemy defeated!");
+        }
+        continue;
+      }
 
       // Mark bullets that are off-screen as inactive
       if (
@@ -436,6 +648,7 @@ class Soldier {
 
   // ========== MOVEMENT ==========
   checkMovement() {
+    if (this.isMeleeing) return;
     const movingLeft = this.keys["a"];
     const movingRight = this.keys["d"];
     const movingUp = this.keys["w"];
@@ -499,7 +712,13 @@ class Soldier {
     if (!this.isAlive) return false;
 
     const now = Date.now();
-    this.updateFireAnimation();
+    this.updateReloadAnimation();
+    if (!this.isReloading) {
+      this.updateFireAnimation();
+    }
+    if (this.isMeleeing) {
+      updateMeleeAnimation();
+    }
 
     // Bullets are updated independently by an internal loop (startBulletLoop)
     // This keeps them moving even if the soldier is idle, moving, or dead.
@@ -553,31 +772,43 @@ class Soldier {
     if (!this.isLoaded) return;
 
     // Update scale
-    this.scale = (this.canvas.width / 1920) * 2.5;
+    const baseScale = this.canvas.width / 1920;
+
+    this.scale = baseScale * 2.5;
+
+    if (this.canvas.width <= 720) {
+      this.scale = Math.max(baseScale * 1.2, 1.5);
+    }
     this.drawOffsetX = (this.maxFrameWidth * this.scale) / 2;
     this.drawOffsetY = this.maxFrameHeight * this.scale;
 
     // Choose correct frame based on state
     let frame;
     let spriteSheet;
-
-    if (this.isFiring && this.fireFrames.length > 0) {
-      // Use firing animation
+    if (this.isMeleeing && this.meleeFrames.length > 0) {
+      // MELEE FIRST
+      frame = this.meleeFrames[this.meleeFrameIndex];
+      spriteSheet = this.meleeSpriteSheet;
+    } else if (this.isReloading && this.reloadFrames.length > 0) {
+      // Reloading second priority
+      frame = this.reloadFrames[this.reloadFrameIndex];
+      spriteSheet = this.reloadSpriteSheet;
+    } else if (this.isFiring && this.fireFrames.length > 0) {
+      // Firing third priority
       frame = this.fireFrames[this.fireFrameIndex];
       spriteSheet = this.firingSpriteSheet;
     } else if (this.isMoving) {
-      // Use walk/run animation when moving
+      // Moving fourth priority
       frame = this.activeFrames[this.currentFrame] || this.activeFrames[0];
       spriteSheet = this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet;
     } else {
-      // NOT moving and NOT firing = use idle frames
+      // Idle last
       if (this.idleFrames.length > 0) {
         frame =
           this.idleFrames[this.currentFrame % this.idleFrames.length] ||
           this.idleFrames[0];
         spriteSheet = this.idleSpriteSheet;
       } else {
-        // Fallback to walk if no idle
         frame = this.activeFrames[this.currentFrame] || this.activeFrames[0];
         spriteSheet = this.walkSpriteSheet;
       }
@@ -652,8 +883,15 @@ class Soldier {
     // Draw bullets
     this.drawBullets();
 
+    // Draw enemy
+    this.drawEnemy();
+
     // Draw health bar
     this.drawHealthBar();
+    // Draw ammocounter bar
+    this.drawAmmoCounter();
+
+    this.drawReloadProgress();
   }
 
   drawBullets() {
@@ -724,6 +962,126 @@ class Soldier {
     this.ctx.strokeRect(barX, barY, healthBarWidth, healthBarHeight);
   }
 
+  drawAmmoCounter() {
+    if (!this.isLoaded) return;
+
+    this.ctx.save();
+
+    // TOP-RIGHT corner position
+    const padding = 20;
+    const ammoX = this.canvas.width - padding;
+    const ammoY = padding + 20; // Slightly lower than top edge
+
+    const ammoText = `${this.bulletsInMagazine}/${this.magazineSize}`;
+
+    // Background for readability
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    const textWidth = this.ctx.measureText(ammoText).width + 15;
+    this.ctx.fillRect(
+      ammoX - textWidth - 15, // Left edge
+      ammoY - 15, // Top edge
+      textWidth + 20, // Width
+      30, // Height
+    );
+
+    // Ammo text
+    this.ctx.fillStyle = this.bulletsInMagazine > 5 ? "#FFFFFF" : "#FF0000";
+    this.ctx.font = "bold 20px Arial";
+    this.ctx.textAlign = "right";
+    this.ctx.textBaseline = "middle";
+    this.ctx.fillText(ammoText, ammoX, ammoY);
+
+    // "AMMO" label above
+    this.ctx.fillStyle = "#77ff00";
+    this.ctx.font = "17px Arial";
+    this.ctx.fillText("AMMO", ammoX, ammoY - 25);
+
+    this.ctx.restore();
+  }
+  drawReloadProgress() {
+    if (!this.isReloading || !this.isLoaded) return;
+
+    this.ctx.save();
+
+    const progress = (Date.now() - this.reloadStartTime) / this.reloadTime;
+    const progressPercent = Math.min(Math.floor(progress * 100), 100);
+
+    // Position UNDER the soldier (below feet)
+    const barWidth = 60 * this.scale;
+    const barHeight = 5 * this.scale;
+    const barX = this.x - barWidth / 2; // Center under soldier
+    const barY = this.y + 5 * this.scale; // Below soldier's feet
+
+    // Reload progress bar background
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    // Reload progress fill
+    this.ctx.fillStyle = "#4CAF50";
+    this.ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+
+    // Border
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    // "RELOADING" text below the bar
+    this.ctx.fillStyle = "#FFFF00";
+    this.ctx.font = `${6 * this.scale}px Arial`;
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "top";
+    this.ctx.fillText("RELOADING", this.x, barY + barHeight + 5);
+
+    // Optional: Percentage text inside bar
+    // this.ctx.fillStyle = "#FFFFFF";
+    // this.ctx.font = `${4 * this.scale}px Arial`;
+    // this.ctx.fillText(`${progressPercent}%`, this.x, barY + barHeight / 2);
+
+    this.ctx.restore();
+  }
+
+  drawEnemy() {
+    if (!this.enemy.isAlive) return;
+
+    this.ctx.save();
+
+    // Draw enemy as a red rectangle
+    this.ctx.fillStyle = "red";
+    this.ctx.fillRect(
+      this.enemy.x - this.enemy.width / 2,
+      this.enemy.y - this.enemy.height / 2,
+      this.enemy.width,
+      this.enemy.height,
+    );
+
+    // Draw enemy health bar above
+    const barWidth = 50;
+    const barHeight = 6;
+    const barX = this.enemy.x - barWidth / 2;
+    const barY = this.enemy.y - this.enemy.height / 2 - 10;
+
+    // Background
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    // Health fill
+    const healthPercent = this.enemy.health / this.enemy.maxHealth;
+    const healthWidth = barWidth * healthPercent;
+    this.ctx.fillStyle =
+      healthPercent > 0.5
+        ? "#4CAF50"
+        : healthPercent > 0.25
+          ? "#FF9800"
+          : "#F44336";
+    this.ctx.fillRect(barX, barY, healthWidth, barHeight);
+
+    // Border
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    this.ctx.restore();
+  }
   takeDamage(amount) {
     if (!this.isAlive) return false;
 
@@ -797,9 +1155,23 @@ function damageCurrentSoldier(amount = 10) {
   }
 }
 
+function forceReload() {
+  if (window.currentSoldier) {
+    window.currentSoldier.startReloading();
+  }
+}
+
+function setAmmo(count) {
+  if (window.currentSoldiersoldier) {
+    window.currentSoldier.bulletsInMagazine = count;
+  }
+}
+
 // ========== EXPORT TO WINDOW ==========
 window.Soldier = Soldier;
 window.createSoldier = createSoldier;
 window.damageCurrentSoldier = damageCurrentSoldier;
 window.toggleMouseFiring = toggleMouseFiring;
 window.clearBullets = clearBullets;
+window.forceReload = forceReload;
+window.setAmmo = setAmmo;
