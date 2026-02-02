@@ -17,11 +17,13 @@ class Soldier {
     this.walkSpriteSheet = new Image();
     this.runSpriteSheet = new Image();
     this.firingSpriteSheet = new Image();
+    this.idleSpriteSheet = new Image();
 
     // Frame arrays (will be populated when sprites load)
     this.frames = [];
     this.runFrames = [];
     this.fireFrames = [];
+    this.idleFrames = [];
 
     this.activeFrames = this.frames;
     this.totalFrames = 0;
@@ -50,6 +52,7 @@ class Soldier {
     this.isMouseDown = false;
     this.lastBulletUpdate = Date.now();
     this.bulletUpdateSpeed = 16; // ~60 FPS for smooth bullet movement
+    this.bulletInterval = null; // interval handle for independent bullet loop
 
     // Animation timing
     this.speed = 100;
@@ -89,6 +92,12 @@ class Soldier {
         width: 25, // Measured from fire sprite
         height: 63, // Measured from fire sprite
         offsetX: -13, // Might be offset due to gun
+        offsetY: 0,
+      },
+      idle: {
+        width: 20, // Measured from fire sprite
+        height: 68, // Measured from fire sprite
+        offsetX: -5, // Might be offset due to gun
         offsetY: 0,
       },
     };
@@ -177,6 +186,20 @@ class Soldier {
       console.error("❌ Failed to load firing spritesheet!");
     };
     this.firingSpriteSheet.src = "assets/soldier/Soldier_1/Shot_1.png";
+
+    // Idle sprite - SEPARATE from firing sprite!
+    this.idleSpriteSheet.onload = () => {
+      console.log("✅ Idle spritesheet loaded!");
+
+      // Generate idle frames
+      this.idleFrames = this.generateFramesFromSheet(this.idleSpriteSheet);
+      console.log(`✅ Generated ${this.idleFrames.length} idle frames`);
+    };
+
+    this.idleSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load idle spritesheet!");
+    };
+    this.idleSpriteSheet.src = "assets/soldier/Soldier_1/Idle.png";
   }
 
   // ========== COLLISION LOGIC ==========
@@ -185,8 +208,10 @@ class Soldier {
       return this.collisionBoxes.fire;
     } else if (this.isRunning) {
       return this.collisionBoxes.run;
-    } else {
+    } else if (this.isMoving) {
       return this.collisionBoxes.walk;
+    } else {
+      return this.collisionBoxes.idle;
     }
   }
 
@@ -203,7 +228,7 @@ class Soldier {
       pointX >= boxLeftX && pointX <= boxLeftX + box.width * this.scale;
 
     const isInsideY =
-      pointY >= boxtopY && pointY <= boxTopY + box.height * this.scale;
+      pointY >= boxTopY && pointY <= boxTopY + box.height * this.scale;
 
     return isInsideX && isInsideY;
   }
@@ -297,9 +322,7 @@ class Soldier {
     this.lastFireUpdate = now;
     this.lastFireTime = now;
 
-    if (!this.isMoving) {
-      this.isPlaying = true;
-    }
+    this.isPlaying = true;
 
     this.createBullet();
   }
@@ -326,27 +349,63 @@ class Soldier {
     };
 
     this.bullets.push(bullet);
+
+    // Ensure bullets are updated independently of the soldier's update loop
+    this.startBulletLoop();
   }
 
   updateBullets() {
+    // Move bullets and prune inactive ones
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
+
+      // Skip and remove inactive bullets
       if (!bullet.active) {
         this.bullets.splice(i, 1);
         continue;
       }
 
+      // Move bullet
       bullet.x += bullet.dirX * bullet.speed;
       bullet.y += bullet.dirY * bullet.speed;
 
+      // Mark bullets that are off-screen as inactive
       if (
-        bullet.x < 0 ||
-        bullet.x > this.canvas.width ||
-        bullet.y < 0 ||
-        bullet.y > this.canvas.height
+        bullet.x < -100 ||
+        bullet.x > this.canvas.width + 100 ||
+        bullet.y < -100 ||
+        bullet.y > this.canvas.height + 100
       ) {
         bullet.active = false;
       }
+    }
+
+    // If no bullets remain, stop the independent loop
+    if (this.bullets.length === 0) {
+      this.stopBulletLoop();
+    }
+  }
+
+  // Start an independent loop to update bullets regardless of the soldier state
+  startBulletLoop() {
+    if (this.bulletInterval) return; // already running
+
+    // Clamp interval to reasonable minimum for performance
+    const intervalMs = Math.max(16, this.bulletUpdateSpeed);
+    this.bulletInterval = setInterval(() => {
+      try {
+        this.updateBullets();
+      } catch (err) {
+        console.error("Bullet loop error:", err);
+      }
+    }, intervalMs);
+  }
+
+  // Stop the independent bullet loop
+  stopBulletLoop() {
+    if (this.bulletInterval) {
+      clearInterval(this.bulletInterval);
+      this.bulletInterval = null;
     }
   }
 
@@ -355,7 +414,8 @@ class Soldier {
 
     const now = Date.now();
 
-    if (now - this.lastFireUpdate >= this.fireAnimationSpeed) {
+    const actualFireSpeed = Math.max(this.fireAnimationSpeed, 50);
+    if (now - this.lastFireUpdate >= actualFireSpeed) {
       this.fireFrameIndex =
         (this.fireFrameIndex + 1) % this.fireAnimationLength;
       this.lastFireUpdate = now;
@@ -384,7 +444,7 @@ class Soldier {
     this.isMoving = movingLeft || movingRight || movingUp || movingDown;
 
     if (this.isMoving) {
-      // THIS IS THE FIX: Always set isPlaying to true when moving
+      // Always set isPlaying to true when moving
       if (!this.isPlaying && this.isLoaded) {
         this.isPlaying = true;
         this.currentFrame = 0;
@@ -397,11 +457,24 @@ class Soldier {
         this.direction = 1;
       }
     } else {
+      // When not moving AND not firing
       if (!this.isFiring) {
-        this.isPlaying = false;
+        // Switch to idle animation if we have idle frames
+        if (this.idleFrames.length > 0) {
+          this.activeFrames = this.idleFrames;
+          this.totalFrames = this.idleFrames.length;
+          this.isPlaying = true; // Keep playing, but with idle animation
+          this.currentFrame = 0;
+          this.lastUpdate = Date.now();
+        } else {
+          // No idle frames? Then stop animation
+          this.isPlaying = false;
+        }
       }
+      // If we're firing, isPlaying should stay true for fire animation
     }
   }
+
   switchAnimationMode() {
     if (this.isRunning) {
       console.log("Switching to run mode");
@@ -426,18 +499,16 @@ class Soldier {
     if (!this.isAlive) return false;
 
     const now = Date.now();
-
     this.updateFireAnimation();
-    // Update bullets independently of animation
-    if (now - this.lastBulletUpdate >= this.bulletUpdateSpeed) {
-      this.updateBullets();
-      this.lastBulletUpdate = now;
-    }
+
+    // Bullets are updated independently by an internal loop (startBulletLoop)
+    // This keeps them moving even if the soldier is idle, moving, or dead.
 
     const isMoving =
       this.keys["a"] || this.keys["d"] || this.keys["w"] || this.keys["s"];
 
-    if (isMoving && this.isPlaying && now - this.lastUpdate >= this.speed) {
+    // Update animation frame if playing
+    if (this.isPlaying && now - this.lastUpdate >= this.speed) {
       this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
       this.lastUpdate = now;
     }
@@ -468,6 +539,12 @@ class Soldier {
       Math.min(this.canvas.height - padding, this.y),
     );
 
+    if (Math.random() < 0.01) {
+      // Only log 1% of updates
+      console.log(
+        `🔄 Update called: isPlaying=${this.isPlaying}, isMoving=${this.isMoving}, isFiring=${this.isFiring}, bullets=${this.bullets.length}`,
+      );
+    }
     return true;
   }
 
@@ -488,10 +565,22 @@ class Soldier {
       // Use firing animation
       frame = this.fireFrames[this.fireFrameIndex];
       spriteSheet = this.firingSpriteSheet;
-    } else {
-      // Use walk/run animation
+    } else if (this.isMoving) {
+      // Use walk/run animation when moving
       frame = this.activeFrames[this.currentFrame] || this.activeFrames[0];
       spriteSheet = this.isRunning ? this.runSpriteSheet : this.walkSpriteSheet;
+    } else {
+      // NOT moving and NOT firing = use idle frames
+      if (this.idleFrames.length > 0) {
+        frame =
+          this.idleFrames[this.currentFrame % this.idleFrames.length] ||
+          this.idleFrames[0];
+        spriteSheet = this.idleSpriteSheet;
+      } else {
+        // Fallback to walk if no idle
+        frame = this.activeFrames[this.currentFrame] || this.activeFrames[0];
+        spriteSheet = this.walkSpriteSheet;
+      }
     }
 
     // Calculate scaled dimensions
