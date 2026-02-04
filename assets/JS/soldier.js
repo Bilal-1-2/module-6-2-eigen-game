@@ -77,6 +77,7 @@ class Soldier {
     this.meleeAnimationLength = 0;
     this.meleeFrameIndex = 0;
     this.lastMeleeTime = 0;
+    this.meleeAnimationSpeed = 100; // ms per frame
 
     // reloading properties
     this.magazineSize = 30;
@@ -273,8 +274,8 @@ class Soldier {
       this.meleeAnimationLength = this.meleeFrames.length;
       console.log(`Generated ${this.meleeFrames.length} melee frames`);
     };
-    this.reloadSpriteSheet.onerror = () => {
-      console.error("❌ Failed to load reloading spritesheet!");
+    this.meleeSpriteSheet.onerror = () => {
+      console.error("❌ Failed to load melee spritesheet!");
     };
     this.meleeSpriteSheet.src = "assets/soldier/Soldier_1/Attack.png";
   }
@@ -403,9 +404,8 @@ class Soldier {
   }
 
   updateMeleeAnimation() {
-    if (!this.isAlive && this.isLoaded) return;
+    if (!this.isAlive || !this.isLoaded) return;
     const now = Date.now();
-    const meleeAnimationSpeed = 100;
 
     if (now - this.lastMeleeUpdate >= this.meleeAnimationSpeed) {
       this.meleeFrameIndex++;
@@ -717,7 +717,7 @@ class Soldier {
       this.updateFireAnimation();
     }
     if (this.isMeleeing) {
-      updateMeleeAnimation();
+      this.updateMeleeAnimation();
     }
 
     // Bullets are updated independently by an internal loop (startBulletLoop)
